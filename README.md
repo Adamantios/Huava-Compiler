@@ -1,5 +1,5 @@
 # Huava-Compiler
-Java-like compiler called Huava, created as a college project.
+Java-like compiler called **Huava**, created as a college project.
 
 ## Usage
 - Install maven.
