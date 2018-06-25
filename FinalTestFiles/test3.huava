@@ -1,0 +1,53 @@
+class Test3 {
+
+    static float modOperation(float afterMod, int number) {
+        return number % afterMod;
+	}
+
+	static void main( ) {
+		int i;
+		i = 0;
+		while (i < 10) {
+			/* This is float only for testing purposes. */
+			float j;
+			j = i + 1;
+			write(j + "st time in the loop.");
+			write ("\n");
+			i = i+1;
+			continue;
+			write("I will never be executed...");
+		}
+		while (!i) {
+		    write("I will only be executed once...\n");
+		    break;
+		}
+		if (i != 10) {
+			Test2 p;
+            p = new Test2();
+            p.m = new Test1();
+            p.m.text = "Hello World ????? :'( \n";
+            p.printMany(10);
+		}
+		else {
+		    Test2 p;
+            p = new Test2();
+            p.m = new Test1();
+            p.m.text = "Hello World :) \n";
+            p.printMany(1);
+		}
+
+        float f;
+        f = 0.654;
+		float final;
+		write("Operating mod...\n");
+		final = modOperation(f, i);
+		write("The mod result is: ");
+		write(final + "\n");
+		string s;
+		s = "Lets test null\n";
+		write(s);
+		s = null;
+		write("Null worked!\n");
+        write("Done!\n");
+	}
+}

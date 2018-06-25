@@ -1,0 +1,536 @@
+package org.hua;
+
+import java_cup.runtime.Symbol;
+import java.util.List;
+import java.util.ArrayList;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.objectweb.asm.Type;
+import org.hua.ast.*;
+
+parser code
+{:
+    private static final Logger LOGGER = LoggerFactory.getLogger(parser.class);
+
+    /** Report a non fatal error (or warning).
+     *
+     * @param message an error message.
+     * @param info    an extra object reserved for use by specialized subclasses.
+     */
+    public void report_error(String message, Object info)
+    {
+        String error = "";
+        if (!(info instanceof Symbol))
+            info = cur_token;
+        if(info instanceof Symbol) {
+            int line = ((Symbol)info).left;
+            int column = ((Symbol)info).right;
+            error = line  + ":" + column;
+        }
+        error += ": " + message;
+        LOGGER.error(error);
+    }
+
+    /** Report a fatal error.
+     *
+     * @param message an error message.
+     * @param info    an extra object reserved for use by specialized subclasses.
+     */
+    public void report_fatal_error(String   message, Object   info) throws java.lang.Exception
+    {
+        /* stop parsing (not really necessary since we throw an exception, but) */
+        done_parsing();
+
+        /* use the normal error message reporting to put out the message */
+        report_error(message, info);
+
+        /* throw an exception */
+        throw new Exception("Can't recover from previous error(s)");
+    }
+
+    public int getLine() {
+        Symbol symbol = (Symbol) cur_token;
+        return symbol.left;
+    }
+
+    public int getColumn() {
+        Symbol symbol = (Symbol) cur_token;
+        return symbol.right;
+    }
+:};
+
+terminal java.lang.String IDENTIFIER;       // name
+terminal WRITE;
+terminal LPAREN, RPAREN, SEMICOLON;
+terminal EQ;
+terminal TIMES, DIVISION, MOD;
+terminal PLUS, MINUS, UMINUS;
+terminal AND, OR;
+terminal GREATER, LESS, GREATER_OR_EQUAL, LESS_OR_EQUAL, EQUALS, NOT_EQUALS, LBRACKET, RBRACKET, NOT;
+terminal WHILE, DOT, COMMA, BREAK, CONTINUE, RETURN, IF, ELSE;
+terminal CLASS, NEW, THIS, STATIC, NULL;
+terminal INT, FLOAT, STRING, VOID;
+
+terminal java.lang.Integer INTEGER_LITERAL;
+terminal java.lang.Float  FLOAT_LITERAL;
+terminal java.lang.String  STRING_LITERAL;
+
+non terminal Expression Expr;
+non terminal List<Expression> ExprList;
+non terminal Statement Stmt;
+non terminal List<Statement> StmtList;
+non terminal CompUnit CompUnit;
+non terminal CompoundStatement CompStmt;
+non terminal ClassDefinition ClassDefinition;
+non terminal List<ClassDefinition> ClassDefinitionList;
+non terminal List<FieldOrFunctionDefinition> FieldOrFunctionDefinitionList;
+non terminal FieldOrFunctionDefinition FieldOrFunctionDefinition;
+non terminal FieldDefinition FieldDefinition;
+non terminal FunctionDefinition FunctionDefinition;
+non terminal List<ParameterDeclaration> ParameterList;
+non terminal ParameterDeclaration ParameterDeclaration;
+non terminal Type TypeSpecifier;
+
+precedence right EQ;
+precedence left EQUALS, NOT_EQUALS, AND, OR;
+precedence left GREATER, LESS, GREATER_OR_EQUAL, LESS_OR_EQUAL;
+precedence left PLUS, MINUS;
+precedence left TIMES, DIVISION, MOD;
+precedence left NOT;
+precedence right UMINUS;
+
+start with CompUnit;
+
+CompUnit ::= 
+           | ClassDefinitionList:cdl
+             {:
+                  RESULT = new CompUnit(cdl);
+                  RESULT.setLine(cdlleft);
+                  RESULT.setColumn(cdlright);
+             :}
+           ;
+
+ClassDefinitionList ::= ClassDefinition:cd
+                         {:
+                               RESULT = new ArrayList<ClassDefinition>();
+                               RESULT.add(cd);
+                         :}
+                      | ClassDefinitionList:cdl ClassDefinition:cd
+                         {:
+                               cdl.add(cd);
+                               RESULT = cdl;
+                         :}
+                      ;
+
+ClassDefinition ::= CLASS:c IDENTIFIER:id LBRACKET RBRACKET
+                    {:
+                         RESULT = new ClassDefinition(id, new ArrayList<FieldOrFunctionDefinition>());
+                         RESULT.setLine(cleft);
+                         RESULT.setColumn(cright);
+                    :}
+                  | CLASS:c IDENTIFIER:id LBRACKET FieldOrFunctionDefinitionList:fdl RBRACKET
+                    {:
+                         RESULT = new ClassDefinition(id, fdl);
+                         RESULT.setLine(cleft);
+                         RESULT.setColumn(cright);
+                    :}
+                  ;
+
+
+FieldOrFunctionDefinitionList ::= FieldOrFunctionDefinition:fd
+                                  {:
+                                       RESULT = new ArrayList<FieldOrFunctionDefinition>();
+                                       RESULT.add(fd);
+                                  :}
+                                | FieldOrFunctionDefinitionList:fdl FieldOrFunctionDefinition:fd
+                                  {:
+                                       fdl.add(fd);
+                                       RESULT = fdl;
+                                  :}
+                                ;
+
+FieldOrFunctionDefinition ::= FieldDefinition:fd
+                              {:
+                                   RESULT = fd;
+                                   RESULT.setLine(fdleft);
+                                   RESULT.setColumn(fdright);
+                              :}
+                            | FunctionDefinition:fd
+                              {:
+                                   RESULT = fd;
+                                   RESULT.setLine(fdleft);
+                                   RESULT.setColumn(fdright);
+                              :}
+                            ;
+
+FieldDefinition ::= TypeSpecifier:t IDENTIFIER:id SEMICOLON
+                    {:
+                           RESULT = new FieldDefinition(false, t, id);
+                           RESULT.setLine(tleft);
+                           RESULT.setColumn(tright);
+                    :}
+                  | STATIC:s TypeSpecifier:t IDENTIFIER:id SEMICOLON
+                    {:
+                           RESULT = new FieldDefinition(true, t, id);
+                           RESULT.setLine(tleft);
+                           RESULT.setColumn(tright);
+                    :}
+                    ;
+
+FunctionDefinition ::= STATIC:s TypeSpecifier:t IDENTIFIER:id LPAREN ParameterList:parameterDeclarationList RPAREN CompStmt:cs
+                       {:
+                           RESULT = new FunctionDefinition(true, id, t, parameterDeclarationList, cs);
+                           RESULT.setLine(sleft);
+                           RESULT.setColumn(sright);
+                       :}
+                     | STATIC:s TypeSpecifier:t IDENTIFIER:id LPAREN RPAREN CompStmt:cs
+                       {:
+                           RESULT = new FunctionDefinition(true, id, t, new ArrayList<ParameterDeclaration>(), cs);
+                           RESULT.setLine(sleft);
+                           RESULT.setColumn(sright);
+                       :}
+                     | TypeSpecifier:t IDENTIFIER:id LPAREN ParameterList:parameterDeclarationList RPAREN CompStmt:cs
+                       {:
+                           RESULT = new FunctionDefinition(false, id, t, parameterDeclarationList, cs);
+                           RESULT.setLine(tleft);
+                           RESULT.setColumn(tright);
+                      :}
+                     | TypeSpecifier:t IDENTIFIER:id LPAREN RPAREN CompStmt:cs
+                      {:
+                           RESULT = new FunctionDefinition(false, id, t, new ArrayList<ParameterDeclaration>(), cs);
+                           RESULT.setLine(tleft);
+                           RESULT.setColumn(tright);
+                      :}
+                      ;
+
+ParameterList ::= ParameterDeclaration:p
+                  {:
+                      RESULT = new ArrayList<ParameterDeclaration>();
+                      RESULT.add(p);
+                  :}
+                | ParameterList:parameterDeclarationList COMMA ParameterDeclaration:p
+                  {:
+                        parameterDeclarationList.add(p);
+                        RESULT = parameterDeclarationList;
+                  :}
+                ;
+
+ParameterDeclaration ::= TypeSpecifier:t IDENTIFIER:i
+                         {:
+                             RESULT = new ParameterDeclaration(t,i);
+                             RESULT.setLine(tleft);
+                             RESULT.setColumn(tright);
+                         :}
+                       ;
+
+TypeSpecifier ::= INT
+                  {:
+                     RESULT = Type.INT_TYPE;
+                  :}
+                | FLOAT
+                  {:
+                     RESULT = Type.FLOAT_TYPE;
+                  :}
+                | STRING
+                  {:
+                     RESULT = Type.getType("Ljava/lang/String;");
+                  :}
+                | VOID
+                  {:
+                     RESULT = Type.VOID_TYPE;
+                  :}
+                | IDENTIFIER:id
+                  {:
+                     RESULT = Type.getType("Lorg/hua/" + id + ";");
+                  :}  
+                ;
+
+CompStmt ::= LBRACKET StmtList:sl RBRACKET
+             {:
+                RESULT = new CompoundStatement(sl);
+                RESULT.setLine(slleft);
+                RESULT.setColumn(slright);
+             :}
+           | LBRACKET RBRACKET
+           | Stmt:s
+             {:
+                List<Statement> sl = new ArrayList();
+                sl.add(s);
+                RESULT = new CompoundStatement(sl);
+                RESULT.setLine(sleft);
+                RESULT.setColumn(sright);
+             :}
+           ;
+
+StmtList ::= Stmt:s
+             {:
+                 RESULT = new ArrayList<Statement>();
+                 RESULT.add(s);
+             :}
+           | StmtList:sl Stmt:s
+             {:
+                 sl.add(s);
+                 RESULT = sl;
+             :}
+           ; 
+
+Stmt ::= WRITE:w LPAREN Expr:e RPAREN SEMICOLON
+         {:
+             RESULT = new WriteStatement(e);
+             RESULT.setLine(wleft);
+             RESULT.setColumn(wright);
+         :}
+       | WHILE:w LPAREN Expr:e RPAREN CompStmt:s
+         {:
+             RESULT = new WhileStatement(e, s);
+             RESULT.setLine(wleft);
+             RESULT.setColumn(wright);
+         :}
+       | IF:i LPAREN Expr:e RPAREN CompStmt:s
+         {:
+             RESULT = new IfStatement(e, s);
+             RESULT.setLine(ileft);
+             RESULT.setColumn(iright);
+         :}
+       | IF:i LPAREN Expr:e RPAREN CompStmt:s1 ELSE CompStmt:s2
+         {:
+             RESULT = new IfElseStatement(e, s1, s2);
+             RESULT.setLine(ileft);
+             RESULT.setColumn(iright);
+         :}
+       | Expr:e1 EQ Expr:e2 SEMICOLON
+         {:
+             RESULT = new AssignmentStatement(e1, e2);
+             RESULT.setLine(e1left);
+             RESULT.setColumn(e1right);
+         :}
+       | Expr:e SEMICOLON
+         {:
+             RESULT = new SimpleStatement(e);
+             RESULT.setLine(eleft);
+             RESULT.setColumn(eright);
+         :}
+       | RETURN:r SEMICOLON
+         {:
+             RESULT = new SimpleReturnStatement();
+             RESULT.setLine(rleft);
+             RESULT.setColumn(rright);
+         :}
+       | RETURN Expr:e SEMICOLON
+         {:
+             RESULT = new ReturnStatement(e);
+             RESULT.setLine(eleft);
+             RESULT.setColumn(eright);
+         :}
+       | BREAK:b SEMICOLON
+         {:
+             RESULT = new BreakStatement();
+             RESULT.setLine(bleft);
+             RESULT.setColumn(bright);
+         :}
+       | CONTINUE:c SEMICOLON
+         {:
+             RESULT = new ContinueStatement();
+             RESULT.setLine(cleft);
+             RESULT.setColumn(cright);
+         :}
+       | FieldDefinition:fd
+         {:
+             RESULT = fd;
+             RESULT.setLine(fdleft);
+             RESULT.setColumn(fdright);
+         :}
+         ;
+
+
+Expr ::= INTEGER_LITERAL:l
+        {:
+            RESULT = new IntegerLiteralExpression(l);
+            RESULT.setLine(lleft);
+            RESULT.setColumn(lright);
+        :}
+       | FLOAT_LITERAL:l
+        {:
+            RESULT = new FloatLiteralExpression(l);
+            RESULT.setLine(lleft);
+            RESULT.setColumn(lright);
+        :}
+       | STRING_LITERAL:s
+        {:
+            RESULT = new StringLiteralExpression(s);
+            RESULT.setLine(sleft);
+            RESULT.setColumn(sright);
+        :}
+       | THIS:t
+        {:
+            RESULT = new ThisExpression();
+            RESULT.setLine(tleft);
+            RESULT.setColumn(tright);
+        :}
+       | NULL:n
+        {:
+            RESULT = new NullExpression();
+            RESULT.setLine(nleft);
+            RESULT.setColumn(nright);
+        :}
+       | IDENTIFIER:id
+         {:
+             RESULT = new SimpleIdentifierExpression(id);
+             RESULT.setLine(idleft);
+             RESULT.setColumn(idright);
+         :}
+       | IDENTIFIER:id LPAREN RPAREN
+         {:
+             RESULT = new SimpleMethodIdentifier(id);
+             RESULT.setLine(idleft);
+             RESULT.setColumn(idright);
+         :}
+       | IDENTIFIER:id LPAREN ExprList:el RPAREN
+         {:
+             RESULT = new MethodIdentifier(id,el);
+             RESULT.setLine(idleft);
+             RESULT.setColumn(idright);
+         :}
+       | NEW IDENTIFIER:id LPAREN ExprList:el RPAREN
+         {:
+             RESULT = new ConstructorIdentifier(id,el);
+             RESULT.setLine(idleft);
+             RESULT.setColumn(idright);
+         :}
+       | NEW IDENTIFIER:id LPAREN RPAREN
+         {:
+             RESULT = new SimpleConstructorIdentifier(id);
+             RESULT.setLine(idleft);
+             RESULT.setColumn(idright);
+         :}
+       | Expr:e DOT IDENTIFIER:id
+         {:
+              RESULT = new IdentifierExpression(e, id);
+              RESULT.setLine(eleft);
+              RESULT.setColumn(eright);
+         :}
+       | Expr:e DOT IDENTIFIER:id LPAREN ExprList:el RPAREN
+         {:
+              RESULT = new FunctionCallExpression(e, id, el);
+              RESULT.setLine(eleft);
+              RESULT.setColumn(eright);
+         :}
+       | Expr:e DOT IDENTIFIER:id LPAREN RPAREN
+         {:
+              RESULT = new SimpleFunctionCallExpression(e, id);
+              RESULT.setLine(eleft);
+              RESULT.setColumn(eright);
+         :}
+       | LPAREN:lp Expr:e RPAREN
+         {:
+             RESULT = new ParenthesisExpression(e);
+             RESULT.setLine(lpleft);
+             RESULT.setColumn(lpright);
+         :}
+       | Expr:e1 PLUS Expr:e2
+         {:
+             RESULT = new BinaryExpression(Operator.PLUS, e1, e2);
+             RESULT.setLine(e1left);
+             RESULT.setColumn(e1right);
+         :}
+       | Expr:e1 MINUS Expr:e2
+         {:
+             RESULT = new BinaryExpression(Operator.MINUS, e1, e2);
+             RESULT.setLine(e1left);
+             RESULT.setColumn(e1right);
+         :}
+       | Expr:e1 TIMES Expr:e2
+         {:
+             RESULT = new BinaryExpression(Operator.MULTIPLY, e1, e2);
+             RESULT.setLine(e1left);
+             RESULT.setColumn(e1right);
+         :}
+       | Expr:e1 DIVISION Expr:e2
+         {:
+             RESULT = new BinaryExpression(Operator.DIVISION, e1, e2);
+             RESULT.setLine(e1left);
+             RESULT.setColumn(e1right);
+         :}
+       | Expr:e1 MOD Expr:e2
+         {:
+             RESULT = new BinaryExpression(Operator.MOD, e1, e2);
+             RESULT.setLine(e1left);
+             RESULT.setColumn(e1right);
+         :}
+       | Expr:e1 AND Expr:e2
+         {:
+             RESULT = new BinaryExpression(Operator.AND, e1, e2);
+             RESULT.setLine(e1left);
+             RESULT.setColumn(e1right);
+         :}
+       | Expr:e1 OR Expr:e2
+         {:
+             RESULT = new BinaryExpression(Operator.OR, e1, e2);
+             RESULT.setLine(e1left);
+             RESULT.setColumn(e1right);
+         :}
+       | NOT Expr:e
+         {:
+             RESULT = new UnaryExpression(Operator.NOT, e);
+             RESULT.setLine(eleft);
+             RESULT.setColumn(eright);
+         :}
+       | Expr:e1 EQUALS Expr:e2
+         {:
+             RESULT = new BinaryExpression(Operator.EQUAL, e1, e2);
+             RESULT.setLine(e1left);
+             RESULT.setColumn(e1right);
+         :}
+       | Expr:e1 NOT_EQUALS Expr:e2
+         {:
+             RESULT = new BinaryExpression(Operator.NOT_EQUAL, e1, e2);
+             RESULT.setLine(e1left);
+             RESULT.setColumn(e1right);
+         :}
+       | Expr:e1 LESS Expr:e2
+         {:
+             RESULT = new BinaryExpression(Operator.LESS, e1, e2);
+             RESULT.setLine(e1left);
+             RESULT.setColumn(e1right);
+         :}
+       | Expr:e1 LESS_OR_EQUAL Expr:e2
+         {:
+             RESULT = new BinaryExpression(Operator.LESS_EQUAL, e1, e2);
+             RESULT.setLine(e1left);
+             RESULT.setColumn(e1right);
+         :}
+       | Expr:e1 GREATER Expr:e2
+         {:
+             RESULT = new BinaryExpression(Operator.GREATER, e1, e2);
+             RESULT.setLine(e1left);
+             RESULT.setColumn(e1right);
+         :}
+       | Expr:e1 GREATER_OR_EQUAL Expr:e2
+         {:
+             RESULT = new BinaryExpression(Operator.GREATER_EQUAL, e1, e2);
+             RESULT.setLine(e1left);
+             RESULT.setColumn(e1right);
+         :}
+       | MINUS:m Expr:e
+         {:
+             RESULT = new UnaryExpression(Operator.MINUS, e);
+             RESULT.setLine(mleft);
+             RESULT.setColumn(mright);
+         :}
+         %prec UMINUS
+       ;
+
+ExprList ::= Expr:e
+             {:
+                 RESULT = new ArrayList<Expression>();
+                 RESULT.add(e);
+             :}
+            | ExprList:el COMMA Expr:e
+             {:
+                 el.add(e);
+                 RESULT = el;
+             :}
+           ;  
+           
+
+

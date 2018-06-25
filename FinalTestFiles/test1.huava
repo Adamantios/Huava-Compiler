@@ -1,0 +1,6 @@
+class Test1 {
+	string text;
+	void print() {
+		write(text) ;
+	}
+}

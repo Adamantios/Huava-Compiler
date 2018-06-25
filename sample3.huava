@@ -1,0 +1,16 @@
+class Adder {
+
+	int sum(int i) {
+		if (i <= 0) {
+			return 0;
+		}
+		return i + sum(i - 1);
+	}
+
+	static void main() {
+		Adder a;
+		a = new Adder();
+		write(a.sum(100));
+		write("\n");
+	}
+}

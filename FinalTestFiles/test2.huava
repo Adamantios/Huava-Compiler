@@ -1,0 +1,9 @@
+class Test2 {
+	Test1 m;
+	void printMany(int count) {
+		if (count > 0) {
+			m.print();
+			printMany(count - 1);
+		}
+	}
+}
